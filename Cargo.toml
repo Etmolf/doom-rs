@@ -12,4 +12,5 @@ opt-level = 1
 opt-level = 3
 
 [dependencies]
-sdl2 = "0.35.2"
+anyhow = "1.0.71"
+sdl2 = { version = "0.35.2", features = ["ttf", "gfx"] }
