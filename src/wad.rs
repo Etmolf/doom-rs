@@ -88,10 +88,10 @@ pub struct SubSector {
 
 #[derive(Debug, Copy, Clone)]
 pub struct BoundingBox {
-    top: i16,
-    bottom: i16,
-    left: i16,
-    right: i16
+    pub top: i16,
+    pub bottom: i16,
+    pub left: i16,
+    pub right: i16
 }
 
 #[derive(Debug, Clone)]
