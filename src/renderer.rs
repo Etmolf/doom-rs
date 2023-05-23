@@ -7,25 +7,33 @@ use crate::game_context::GameContext;
 use crate::map_renderer::MapRenderer;
 
 pub struct Renderer {
-    canvas: WindowCanvas
+    canvas: WindowCanvas,
+    map_renderer: MapRenderer
 }
 
 impl Renderer {
-    pub fn new(window: Window) -> Result<Renderer> {
+    pub fn new(window: Window, context: &GameContext) -> Result<Renderer> {
         let canvas = sdl2::render::CanvasBuilder::new(window)
             .accelerated()
             .present_vsync()
             .build()?;
 
-        Ok(Renderer { canvas })
+        let width = canvas.viewport().w as i32;
+        let height = canvas.viewport().h as i32;
+
+        let map_renderer = MapRenderer::new(width, height, context.map_data.to_owned());
+
+        Ok(Renderer {
+            canvas,
+            map_renderer
+        })
     }
 
-    pub fn draw(&mut self, context: &mut GameContext) -> Result<()> {
+    pub fn draw(&mut self, context: &GameContext) -> Result<()> {
         self.canvas.set_draw_color(Color::BLACK);
         self.canvas.clear();
 
-        let mut map_renderer = MapRenderer::new(&context.map_data);
-        map_renderer.draw(&self.canvas);
+        self.map_renderer.draw(&self.canvas, &context);
 
         self.canvas.present();
         Ok(())

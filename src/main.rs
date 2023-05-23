@@ -26,10 +26,8 @@ fn main() -> Result<()> {
         .opengl()
         .build()?;
 
-    let map_data = wad::MapData::new(PathBuf::from("wad/DOOM1.WAD"), "E1M1")?;
-
-    let mut context = GameContext::new(map_data)?;
-    let mut renderer = Renderer::new(window)?;
+    let mut context = GameContext::new(PathBuf::from("wad/DOOM1.WAD"), "E1M1")?;
+    let mut renderer = Renderer::new(window, &context)?;
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
@@ -54,8 +52,9 @@ fn main() -> Result<()> {
         let delta_time = delta.as_secs_f64();
         last_frame = now;
 
-        renderer.draw(&mut context)?;
         context.update(delta_time);
+
+        renderer.draw(&context)?;
     }
 
     Ok(())

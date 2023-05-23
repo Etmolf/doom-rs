@@ -3,7 +3,8 @@ use sdl2::gfx::primitives::DrawRenderer;
 use sdl2::pixels::Color;
 use sdl2::render::WindowCanvas;
 use sdl2::sys::Window;
-use crate::wad::{Linedef, MapData, Vertex};
+use crate::game_context::GameContext;
+use crate::wad::{Linedef, MapData, Point, Vertex};
 
 #[derive(Debug)]
 struct MapBounds {
@@ -14,50 +15,54 @@ struct MapBounds {
 }
 
 pub struct MapRenderer {
-    vertexes: Vec<Vertex>,
-    linedefs: Vec<Linedef>,
-    map_bounds: MapBounds
+    map_data: MapData,
+    map_bounds: MapBounds,
 }
 
 impl MapRenderer {
-    pub fn new(map_data: &MapData) -> Self {
-        let vertexes = map_data.vertexes.to_owned();
-        let linedefs = map_data.linedefs.to_owned();
-
+    pub fn new(width: i32, height: i32, map_data: MapData) -> MapRenderer {
         let map_bounds = MapBounds {
-            min_x: vertexes.iter().min_by(|a, b| a.x.cmp(&b.x)).unwrap().x,
-            max_x: vertexes.iter().max_by(|a, b| a.x.cmp(&b.x)).unwrap().x,
-            min_y: vertexes.iter().min_by(|a, b| a.y.cmp(&b.y)).unwrap().y,
-            max_y: vertexes.iter().max_by(|a, b| a.y.cmp(&b.y)).unwrap().y,
+            min_x: map_data.vertexes.iter().min_by(|a, b| a.x.cmp(&b.x)).unwrap().x,
+            max_x: map_data.vertexes.iter().max_by(|a, b| a.x.cmp(&b.x)).unwrap().x,
+            min_y: map_data.vertexes.iter().min_by(|a, b| a.y.cmp(&b.y)).unwrap().y,
+            max_y: map_data.vertexes.iter().max_by(|a, b| a.y.cmp(&b.y)).unwrap().y,
         };
 
-        Self {
-            vertexes,
-            linedefs,
+        let mut map_renderer = Self {
+            map_data,
             map_bounds
-        }
+        };
+
+        map_renderer.remap_vertexes(width, height);
+        map_renderer
     }
 
-    pub fn draw(&mut self, canvas: &WindowCanvas) {
-        let width = canvas.viewport().w as i32;
-        let height = canvas.viewport().h as i32;
-
-        self.remap_vertexes(width, height);
+    pub fn draw(&mut self, canvas: &WindowCanvas, context: &GameContext) {
         self.draw_linedefs(canvas);
         self.draw_vertexes(canvas);
+        self.draw_player_pos(canvas, context);
+    }
+
+    fn draw_player_pos(&self, canvas: &WindowCanvas, context: &GameContext) {
+        let player = &context.player;
+
+        let x = self.remap_x(player.position.x, canvas.viewport().w, 30) as i16;
+        let y = self.remap_y(player.position.y, canvas.viewport().h, 30) as i16;
+
+        canvas.filled_circle(x, y, 8, Color::BLUE);
     }
 
     fn draw_linedefs(&self, canvas: &WindowCanvas) {
-        for linedef in &self.linedefs {
-            let p1 = self.vertexes[linedef.start_vertex_id as usize];
-            let p2 = self.vertexes[linedef.end_vertex_id as usize];
+        for linedef in &self.map_data.linedefs {
+            let p1 = self.map_data.vertexes[linedef.start_vertex_id as usize];
+            let p2 = self.map_data.vertexes[linedef.end_vertex_id as usize];
 
             canvas.thick_line(p1.x, p1.y, p2.x, p2.y, 3, Color::YELLOW);
         }
     }
 
     fn draw_vertexes(&mut self, canvas: &WindowCanvas) {
-        for (i, vertex) in self.vertexes.iter().enumerate() {
+        for (i, vertex) in self.map_data.vertexes.iter().enumerate() {
             canvas.filled_circle(vertex.x, vertex.y, 4, Color::WHITE);
         }
     }
@@ -83,13 +88,13 @@ impl MapRenderer {
     }
 
     fn remap_vertexes(&mut self, width: i32, height: i32) {
-        let vertexes = self.vertexes.iter().map(|v| {
+        let vertexes = self.map_data.vertexes.iter().map(|v| {
             Vertex {
                 x: self.remap_x(v.x, width, 30) as i16,
                 y: self.remap_y(v.y, height, 30) as i16
             }
         });
 
-        self.vertexes = vertexes.collect();
+        self.map_data.vertexes = vertexes.collect();
     }
 }

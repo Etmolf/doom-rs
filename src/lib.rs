@@ -3,3 +3,4 @@ pub mod wad;
 pub mod renderer;
 pub mod map_renderer;
 pub mod game_context;
+pub mod player;

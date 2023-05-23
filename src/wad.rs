@@ -44,11 +44,65 @@ pub struct Linedef {
     pub back_sidedef_id: i16
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct Point {
+    pub x: i16,
+    pub y: i16
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Thing {
+    pub position: Point,
+    pub angle: i16,
+    pub ed_type: i16,
+    pub flags: i16
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Seg {
+    pub start_vertex_id: i16,
+    pub end_vertex_id: i16,
+    pub angle: i16,
+    pub linedef_id: i16,
+    pub direction: i16,
+    pub offset: i16
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct Node {
+    pub x_partition: i16,
+    pub y_partition: i16,
+    pub dx_partition: i16,
+    pub dy_partition: i16,
+    pub bbox_right: BoundingBox,
+    pub bbox_left: BoundingBox,
+    pub right_child_id: i16,
+    pub left_child_id: i16
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct SubSector {
+    pub seg_count: i16,
+    pub first_seg_id: i16
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct BoundingBox {
+    top: i16,
+    bottom: i16,
+    left: i16,
+    right: i16
+}
+
+#[derive(Debug, Clone)]
 pub struct MapData {
-    pub reader: Reader,
     pub map_index: usize,
     pub vertexes: Vec<Vertex>,
-    pub linedefs: Vec<Linedef>
+    pub linedefs: Vec<Linedef>,
+    pub nodes: Vec<Node>,
+    pub ssectors: Vec<SubSector>,
+    pub segs: Vec<Seg>,
+    pub things: Vec<Thing>
 }
 
 impl MapData {
@@ -68,11 +122,38 @@ impl MapData {
             None
         )?;
 
+        let nodes: Vec<Node> = reader.read_lump(
+           map_index + LumpIndices::NODES as usize,
+            28,
+            None
+        )?;
+
+        let ssectors: Vec<SubSector> = reader.read_lump(
+           map_index + LumpIndices::SSECTORS as usize,
+            4,
+            None
+        )?;
+
+        let segs: Vec<Seg> = reader.read_lump(
+           map_index + LumpIndices::SEGS as usize,
+            12,
+            None
+        )?;
+
+        let things: Vec<Thing> = reader.read_lump(
+            map_index + LumpIndices::THINGS as usize,
+            10,
+            None
+        )?;
+
         Ok(Self {
-            reader,
             map_index,
             vertexes,
-            linedefs
+            linedefs,
+            nodes,
+            ssectors,
+            segs,
+            things
         })
     }
 }
@@ -213,6 +294,67 @@ impl ReadFromBytes<Linedef> for Reader {
     }
 }
 
+impl ReadFromBytes<Node> for Reader {
+    fn read(&mut self, offset: usize, num_bytes: usize) -> Result<Node> {
+        Ok(Node {
+            x_partition: self.read(offset, 2)?,
+            y_partition: self.read(offset + 2, 2)?,
+            dx_partition: self.read(offset + 4, 2)?,
+            dy_partition: self.read(offset + 6, 2)?,
+            bbox_right: BoundingBox {
+                top: self.read(offset + 8, 2)?,
+                bottom: self.read(offset + 10, 2)?,
+                left: self.read(offset + 12, 2)?,
+                right: self.read(offset + 14, 2)?,
+            },
+            bbox_left: BoundingBox {
+                top: self.read(offset + 16, 2)?,
+                bottom: self.read(offset + 18, 2)?,
+                left: self.read(offset + 20, 2)?,
+                right: self.read(offset + 22, 2)?,
+            },
+            right_child_id: self.read(offset + 24, 2)?,
+            left_child_id: self.read(offset + 26, 2)?
+        })
+    }
+}
+
+impl ReadFromBytes<SubSector> for Reader {
+    fn read(&mut self, offset: usize, num_bytes: usize) -> Result<SubSector> {
+        Ok(SubSector {
+            seg_count: self.read(offset, 2)?,
+            first_seg_id: self.read(offset + 2, 2)?,
+        })
+    }
+}
+
+impl ReadFromBytes<Seg> for Reader {
+    fn read(&mut self, offset: usize, num_bytes: usize) -> Result<Seg> {
+        Ok(Seg {
+            start_vertex_id: self.read(offset, 2)?,
+            end_vertex_id: self.read(offset + 2, 2)?,
+            angle: self.read(offset + 4, 2)?,
+            linedef_id: self.read(offset + 6, 2)?,
+            direction: self.read(offset + 8, 2)?,
+            offset: self.read(offset + 10, 2)?,
+        })
+    }
+}
+
+impl ReadFromBytes<Thing> for Reader {
+    fn read(&mut self, offset: usize, num_bytes: usize) -> Result<Thing> {
+        Ok(Thing {
+            position: Point {
+                x: self.read(offset, 2)?,
+                y: self.read(offset + 2, 2)?
+            },
+            angle: self.read(offset + 4, 2)?,
+            ed_type: self.read(offset + 6, 2)?,
+            flags: self.read(offset + 8, 2)?,
+        })
+    }
+}
+
 pub trait ReadLumpData<T> {
     fn read_lump(&mut self, lump_index: usize, num_bytes: usize, header_length: Option<usize>) -> Result<T>;
 }
@@ -248,5 +390,73 @@ impl ReadLumpData<Vec<Linedef>> for Reader {
         }
 
         Ok(linedefs)
+    }
+}
+
+impl ReadLumpData<Vec<Node>> for Reader {
+    fn read_lump(&mut self, lump_index: usize, num_bytes: usize, header_length: Option<usize>) -> Result<Vec<Node>> {
+        let lump_info = self.directory.get(lump_index).unwrap().clone();
+        let mut nodes: Vec<Node> = Vec::new();
+
+        let total_count = lump_info.size / num_bytes;
+
+        for i in 0..total_count {
+            let offset = lump_info.offset + i * num_bytes + header_length.unwrap_or_default();
+            let node: Node = self.read(offset, 24)?;
+            nodes.push(node);
+        }
+
+        Ok(nodes)
+    }
+}
+
+impl ReadLumpData<Vec<SubSector>> for Reader {
+    fn read_lump(&mut self, lump_index: usize, num_bytes: usize, header_length: Option<usize>) -> Result<Vec<SubSector>> {
+        let lump_info = self.directory.get(lump_index).unwrap().clone();
+        let mut ssectors: Vec<SubSector> = Vec::new();
+
+        let total_count = lump_info.size / num_bytes;
+
+        for i in 0..total_count {
+            let offset = lump_info.offset + i * num_bytes + header_length.unwrap_or_default();
+            let ssector: SubSector = self.read(offset, 4)?;
+            ssectors.push(ssector);
+        }
+
+        Ok(ssectors)
+    }
+}
+
+impl ReadLumpData<Vec<Seg>> for Reader {
+    fn read_lump(&mut self, lump_index: usize, num_bytes: usize, header_length: Option<usize>) -> Result<Vec<Seg>> {
+        let lump_info = self.directory.get(lump_index).unwrap().clone();
+        let mut segs: Vec<Seg> = Vec::new();
+
+        let total_count = lump_info.size / num_bytes;
+
+        for i in 0..total_count {
+            let offset = lump_info.offset + i * num_bytes + header_length.unwrap_or_default();
+            let seg: Seg = self.read(offset, 4)?;
+            segs.push(seg);
+        }
+
+        Ok(segs)
+    }
+}
+
+impl ReadLumpData<Vec<Thing>> for Reader {
+    fn read_lump(&mut self, lump_index: usize, num_bytes: usize, header_length: Option<usize>) -> Result<Vec<Thing>> {
+        let lump_info = self.directory.get(lump_index).unwrap().clone();
+        let mut things: Vec<Thing> = Vec::new();
+
+        let total_count = lump_info.size / num_bytes;
+
+        for i in 0..total_count {
+            let offset = lump_info.offset + i * num_bytes + header_length.unwrap_or_default();
+            let thing: Thing = self.read(offset, 10)?;
+            things.push(thing);
+        }
+
+        Ok(things)
     }
 }
