@@ -1,168 +1,9 @@
-use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::ops::Index;
 use std::path::PathBuf;
 use anyhow::Result;
-
-#[derive(Debug)]
-pub struct Header {
-    wad_type: String,
-    num_lumps: usize,
-    info_table_offset: usize
-}
-
-#[derive(Debug, Clone)]
-pub struct LumpInfo {
-    offset: usize,
-    size: usize,
-    name: String
-}
-
-#[derive(Copy, Clone)]
-enum LumpIndices {
-    THINGS = 1,
-    LINEDEFS = 2,
-    SIDEDEFS = 3,
-    VERTEXES = 4,
-    SEGS = 5,
-    SSECTORS = 6,
-    NODES = 7,
-    SECTORS = 8,
-    REJECT = 9,
-    BLOCKMAP = 10
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Linedef {
-    pub start_vertex_id: i16,
-    pub end_vertex_id: i16,
-    pub flags: i16,
-    pub line_type: i16,
-    pub sector_tag: i16,
-    pub front_sidedef_id: i16,
-    pub back_sidedef_id: i16
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Point {
-    pub x: i16,
-    pub y: i16
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Thing {
-    pub position: Point,
-    pub angle: i16,
-    pub ed_type: i16,
-    pub flags: i16
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Seg {
-    pub start_vertex_id: i16,
-    pub end_vertex_id: i16,
-    pub angle: i16,
-    pub linedef_id: i16,
-    pub direction: i16,
-    pub offset: i16
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Node {
-    pub x_partition: i16,
-    pub y_partition: i16,
-    pub dx_partition: i16,
-    pub dy_partition: i16,
-    pub bbox_right: BoundingBox,
-    pub bbox_left: BoundingBox,
-    pub right_child_id: i16,
-    pub left_child_id: i16
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct SubSector {
-    pub seg_count: i16,
-    pub first_seg_id: i16
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct BoundingBox {
-    pub top: i16,
-    pub bottom: i16,
-    pub left: i16,
-    pub right: i16
-}
-
-#[derive(Debug, Clone)]
-pub struct MapData {
-    pub map_index: usize,
-    pub vertexes: Vec<Vertex>,
-    pub linedefs: Vec<Linedef>,
-    pub nodes: Vec<Node>,
-    pub ssectors: Vec<SubSector>,
-    pub segs: Vec<Seg>,
-    pub things: Vec<Thing>
-}
-
-impl MapData {
-    pub fn new(wad_path: PathBuf, map_name: &str) -> Result<Self> {
-        let mut reader = Reader::new(wad_path)?;
-        let map_index = reader.get_lump_index(map_name).unwrap();
-
-        let vertexes: Vec<Vertex> = reader.read_lump(
-            map_index + LumpIndices::VERTEXES as usize,
-            4,
-            None
-        )?;
-
-        let linedefs: Vec<Linedef> = reader.read_lump(
-            map_index + LumpIndices::LINEDEFS as usize,
-            14,
-            None
-        )?;
-
-        let nodes: Vec<Node> = reader.read_lump(
-           map_index + LumpIndices::NODES as usize,
-            28,
-            None
-        )?;
-
-        let ssectors: Vec<SubSector> = reader.read_lump(
-           map_index + LumpIndices::SSECTORS as usize,
-            4,
-            None
-        )?;
-
-        let segs: Vec<Seg> = reader.read_lump(
-           map_index + LumpIndices::SEGS as usize,
-            12,
-            None
-        )?;
-
-        let things: Vec<Thing> = reader.read_lump(
-            map_index + LumpIndices::THINGS as usize,
-            10,
-            None
-        )?;
-
-        Ok(Self {
-            map_index,
-            vertexes,
-            linedefs,
-            nodes,
-            ssectors,
-            segs,
-            things
-        })
-    }
-}
-
-#[derive(Debug, Copy, Clone)]
-pub struct Vertex {
-    pub x: i16,
-    pub y: i16
-}
+use sdl2::sys::u_int16_t;
+use crate::wad::{BoundingBox, Header, Linedef, LumpInfo, Node, Point, Seg, SubSector, Thing, Vertex};
 
 pub struct Reader {
     file: File,
@@ -180,19 +21,13 @@ impl Reader {
             directory: Vec::new()
         };
 
-        reader.load()?;
+        reader.header = Some(reader.read_header()?);
+        reader.directory = reader.read_directory()?;
 
         Ok(reader)
     }
 
-    pub fn load(&mut self) -> Result<()> {
-        self.header = Some(self.read_header()?);
-        self.directory = self.read_directory()?;
-
-        Ok(())
-    }
-
-    pub fn read_directory(&mut self) -> Result<Vec<LumpInfo>> {
+    fn read_directory(&mut self) -> Result<Vec<LumpInfo>> {
         let header = self.read_header()?;
         let mut directory: Vec<LumpInfo> = Vec::new();
 
@@ -211,7 +46,7 @@ impl Reader {
         Ok(directory)
     }
 
-    pub fn read_header(&mut self) -> Result<Header> {
+    fn read_header(&mut self) -> Result<Header> {
         let header = Header {
             wad_type: self.read(0, 4)?,
             num_lumps: self.read(4, 4)?,
@@ -239,17 +74,24 @@ pub trait ReadFromBytes<T> {
     fn read(&mut self, offset: usize, num_bytes: usize) -> Result<T>;
 }
 
-impl ReadFromBytes<i32> for Reader {
-    fn read(&mut self, offset: usize, num_bytes: usize) -> Result<i32> {
-        let mut bytes = self.read_bytes(offset, num_bytes)?;
-        Ok(i32::from_le_bytes(bytes.try_into().unwrap()))
-    }
-}
+// impl ReadFromBytes<i32> for Reader {
+//     fn read(&mut self, offset: usize, num_bytes: usize) -> Result<i32> {
+//         let mut bytes = self.read_bytes(offset, num_bytes)?;
+//         Ok(i32::from_le_bytes(bytes.try_into().unwrap()))
+//     }
+// }
 
 impl ReadFromBytes<i16> for Reader {
     fn read(&mut self, offset: usize, num_bytes: usize) -> Result<i16> {
         let mut bytes = self.read_bytes(offset, num_bytes)?;
         Ok(i16::from_le_bytes(bytes.try_into().unwrap()))
+    }
+}
+
+impl ReadFromBytes<u16> for Reader {
+    fn read(&mut self, offset: usize, num_bytes: usize) -> Result<u16> {
+        let mut bytes = self.read_bytes(offset, num_bytes)?;
+        Ok(u16::from_le_bytes(bytes.try_into().unwrap()))
     }
 }
 

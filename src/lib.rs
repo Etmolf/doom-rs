@@ -1,7 +1,10 @@
-#![allow(unused, dead_code)]
-pub mod wad;
-pub mod bsp;
-pub mod renderer;
-pub mod map_renderer;
-pub mod game_context;
-pub mod player;
+#![allow(unused)]
+
+mod engine;
+pub use engine::DoomEngine;
+
+mod wad;
+mod map;
+
+mod player;
+pub use player::Player;

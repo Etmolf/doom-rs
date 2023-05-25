@@ -4,17 +4,12 @@ use std::path::PathBuf;
 use std::time::Instant;
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use doom::wad;
-use doom::renderer::Renderer;
-use doom::game_context::GameContext;
 use anyhow::Result;
 
-const DOOM_W: u32 = 320;
-const DOOM_H: u32 = 200;
-const SCALE: u32 = 5;
+use doom::DoomEngine;
 
-const SCREEN_WIDTH: u32 = DOOM_W * SCALE;
-const SCREEN_HEIGHT: u32 = DOOM_H * SCALE;
+const SCREEN_WIDTH: u32 = 1600;
+const SCREEN_HEIGHT: u32 = 1000;
 
 fn main() -> Result<()> {
     let sdl_context = sdl2::init().unwrap();
@@ -23,11 +18,11 @@ fn main() -> Result<()> {
     let window = video_subsystem
         .window("Doom", SCREEN_WIDTH, SCREEN_HEIGHT)
         .position_centered()
-        .opengl()
         .build()?;
 
-    let mut context = GameContext::new(PathBuf::from("wad/DOOM1.WAD"), "E1M1")?;
-    let mut renderer = Renderer::new(window, &context)?;
+    let mut engine = DoomEngine::new(window)?;
+
+    engine.init();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
 
@@ -52,9 +47,8 @@ fn main() -> Result<()> {
         let delta_time = delta.as_secs_f64();
         last_frame = now;
 
-        context.update(delta_time);
-
-        renderer.draw(&context)?;
+        engine.update(delta_time);
+        engine.render();
     }
 
     Ok(())
